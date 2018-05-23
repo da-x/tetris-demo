@@ -1,0 +1,6 @@
+[package]
+name = "tetris-demo"
+version = "0.1.0"
+authors = ["Dan Aloni <alonid@gmail.com>"]
+
+[dependencies]
