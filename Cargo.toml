@@ -4,3 +4,6 @@ version = "0.1.0"
 authors = ["Dan Aloni <alonid@gmail.com>"]
 
 [dependencies]
+piston_window = "0.61.0"
+pistoncore-sdl2_window = "0.38"
+piston2d-opengl_graphics = "0.37"
