@@ -3,7 +3,6 @@ extern crate opengl_graphics;
 extern crate rand;
 
 use piston_window::*;
-use std::collections::HashMap;
 use std::time::{Instant, Duration};
 use opengl_graphics::GlGraphics;
 
@@ -25,22 +24,11 @@ impl Metrics {
     }
 }
 
-#[derive(Clone)]
-struct Cell {
-    content: Option<Color>,
-}
-
-impl Cell {
-    fn is_none(&self) -> bool {
-        self.content.is_none()
-    }
-}
+type Cell = Option<Color>;
 
 #[derive(Clone)]
 struct Board {
-    dim_x: usize,
-    dim_y: usize,
-    cells: HashMap<(isize, isize), Cell>,
+    cells: Vec<Vec<Cell>>,
 }
 
 type Piece = Board;
@@ -53,47 +41,56 @@ enum DrawEffect<'a> {
 
 impl Board {
     fn empty(dim_x: usize, dim_y: usize) -> Self {
-        let mut cells = HashMap::new();
+        let line : Vec<_> = (0..dim_x).map(|_|None).collect();
+        let cells : Vec<_> = (0..dim_y).map(|_|line.clone()).collect();
+        Board { cells }
+    }
 
-        for i in 0 .. dim_x as isize {
-            for j in 0.. dim_y as isize {
-                cells.insert((i, j), Cell { content: None });
+    fn valid(&self, offset: (isize, isize)) -> bool {
+        if offset.0 >= 0  &&  offset.0 < self.dim_x() as isize {
+            if offset.1 >= 0  &&  offset.1 < self.dim_y() as isize {
+                return true;
             }
         }
 
-        Board { dim_x, dim_y, cells, }
+        return false;
+    }
+
+    fn dim_x(&self) -> usize {
+        self.cells[0].len()
+    }
+
+    fn dim_y(&self) -> usize {
+        self.cells.len()
     }
 
     fn piece(spec: &[[u8; 4]; 4], color: Color) -> Self {
-        let mut cells = HashMap::new();
+        let mut board = Board::empty(spec[0].len(), spec.len());
 
         for x in 0.. spec[0].len() as isize {
             for y in 0 .. spec.len() as isize {
-                cells.insert((x, y), Cell { content:
+                board.cells[y as usize][x as usize] =
                     if spec[y as usize][x as usize] != 0 { Some(color) } else { None }
-                });
             }
         }
 
-        Board {
-            dim_x: spec[0].len(),
-            dim_y: spec.len(), cells,
-        }
+        board
     }
 
     fn as_merged(&self, offset: (isize, isize), board: &Board) -> Option<Board> {
         let mut copy = self.clone();
 
-        for x in 0..board.dim_x as isize {
-            for y in 0..board.dim_y as isize {
-                let cell = board.cells.get(&(x, y)).unwrap();
-                if cell.content.is_some() {
-                    let x = x + offset.0;
-                    let y = y + offset.1;
-                    let coords = (x, y);
-
-                    if self.cells.get(&coords)?.content.is_none() {
-                        copy.cells.insert(coords, cell.clone());
+        for x in 0..board.dim_x() {
+            for y in 0..board.dim_y() {
+                let cell = board.cells[y][x];
+                if cell.is_some() {
+                    let x = x as isize + offset.0;
+                    let y = y as isize + offset.1;
+                    if !self.valid((x, y)) {
+                        return None;
+                    }
+                    if self.cells[y as usize][x as usize].is_none() {
+                        copy.cells[y as usize][x as usize] = cell.clone();
                     } else { // Collision
                         return None;
                     }
@@ -110,8 +107,8 @@ impl Board {
             Rectangle::new(color).draw(rect, &DrawState::default(), c.transform, gl);
         };
 
-        for x in 0..self.dim_x as isize {
-            for y in 0..self.dim_y as isize {
+        for x in 0..self.dim_x() {
+            for y in 0..self.dim_y() {
                 let block_pixels = metrics.block_pixels as f64;
                 let boarder_size = block_pixels / 20.0;
                 let outer = [block_pixels * (x as f64), block_pixels * (y as f64), block_pixels, block_pixels];
@@ -121,7 +118,8 @@ impl Board {
                 draw([0.2, 0.2, 0.2, 1.0], outer);
                 draw([0.1, 0.1, 0.1, 1.0], inner);
 
-                self.cells.get(&(x, y)).unwrap().content.map(|color| {
+                let color = self.cells[y][x];
+                color.map(|color| {
                     let code = match color {
                         Color::Red     => [1.0, 0.0, 0.0, 1.0],
                         Color::Green   => [0.0, 1.0, 0.0, 1.0],
@@ -162,8 +160,8 @@ impl Board {
     fn does_line_satisify<F>(&self, idx: usize, f: F) -> bool
         where F: Fn(&Cell) -> bool
     {
-        for x in 0..self.dim_x as isize {
-            if !f(self.cells.get(&(x as isize, idx as isize)).unwrap()) {
+        for x in 0..self.dim_x() {
+            if !f(&self.cells[idx][x]) {
                 return false
             }
         }
@@ -172,43 +170,18 @@ impl Board {
     }
 
     fn without_line(&self, idx: usize) -> Self {
-        let mut cells = HashMap::new();
+        let mut board = self.clone();
 
-        for x in 0..self.dim_x as isize {
-            for y in 0..self.dim_y as isize - 1 {
-                let item = if y >= idx as isize {
-                    self.cells.get(&(x, y + 1))
-                } else {
-                    self.cells.get(&(x, y))
-                }.unwrap();
-
-                cells.insert((x, y), item.clone());
-            }
-        }
-
-        Board {
-            dim_x : self.dim_x,
-            dim_y : self.dim_y - 1,
-            cells,
-        }
+        board.cells.remove(idx);
+        board
     }
 
     fn prepend_empty_line(&self) -> Self {
-        let mut cells = HashMap::new();
+        let line : Vec<_> = (0..self.dim_x()).map(|_|None).collect();
+        let mut board = self.clone();
 
-        for x in 0..self.dim_x as isize {
-            cells.insert((x, 0), Cell { content: None });
-        }
-
-        for ((x, y), item) in &self.cells {
-            cells.insert((*x, *y + 1), item.clone());
-        }
-
-        Board {
-            dim_x : self.dim_x,
-            dim_y : self.dim_y + 1,
-            cells,
-        }
+        board.cells.insert(0, line);
+        board
     }
 
     fn with_eliminate_lines(&self, lines: &Vec<usize>) -> Self {
@@ -232,8 +205,8 @@ impl Board {
             board = board.without_line(0);
         }
 
-        while board.does_line_satisify(board.dim_y - 1, Cell::is_none) {
-            board = board.without_line(board.dim_y - 1);
+        while board.does_line_satisify(board.dim_y() - 1, Cell::is_none) {
+            board = board.without_line(board.dim_y() - 1);
         }
 
         board
@@ -242,7 +215,7 @@ impl Board {
     fn get_full_lines(&self) -> Vec<usize> {
         let mut v = vec![];
 
-        for i in (0..self.dim_y).rev() {
+        for i in (0..self.dim_y()).rev() {
             if self.does_line_satisify(i, |cell| !cell.is_none()) {
                 v.push(i);
             }
@@ -252,31 +225,27 @@ impl Board {
     }
 
     fn transposed(&self) -> Self {
-        let mut cells = HashMap::new();
+        let mut board = Self::empty(self.dim_y(), self.dim_x());
 
-        for ((x, y), item) in &self.cells {
-            cells.insert((*y, *x), item.clone());
+        for x in 0..self.dim_x() {
+            for y in 0..self.dim_y() {
+                board.cells[x][y] = self.cells[y][x];
+            }
         }
 
-        Board {
-            dim_x : self.dim_y,
-            dim_y : self.dim_x,
-            cells,
-        }
+        board
     }
 
     fn with_mirrored_y(&self) -> Self {
-        let mut cells = HashMap::new();
+        let mut board = Self::empty(self.dim_x(), self.dim_y());
 
-        for ((x, y), item) in &self.cells {
-            cells.insert((*x, self.dim_y as isize - *y - 1), item.clone());
+        for x in 0..self.dim_x() {
+            for y in 0..self.dim_y() {
+                board.cells[y][x] = self.cells[y][self.dim_x() - x - 1];
+            }
         }
 
-        Board {
-            dim_y : self.dim_y,
-            dim_x : self.dim_x,
-            cells,
-        }
+        board
     }
 
     fn with_rotated_counter(&self) -> Self {
