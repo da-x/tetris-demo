@@ -56,21 +56,15 @@ impl Board {
         return false;
     }
 
-    fn dim_x(&self) -> usize {
-        self.cells[0].len()
-    }
-
-    fn dim_y(&self) -> usize {
-        self.cells.len()
-    }
+    fn dim_x(&self) -> usize { self.cells[0].len() }
+    fn dim_y(&self) -> usize { self.cells.len() }
 
     fn piece(spec: &[[u8; 4]; 4], color: Color) -> Self {
         let mut board = Board::empty(spec[0].len(), spec.len());
 
-        for x in 0.. spec[0].len() as isize {
-            for y in 0 .. spec.len() as isize {
-                board.cells[y as usize][x as usize] =
-                    if spec[y as usize][x as usize] != 0 { Some(color) } else { None }
+        for x in 0.. spec[0].len() {
+            for y in 0 .. spec.len() {
+                board.cells[y][x] = if spec[y][x] != 0 { Some(color) } else { None }
             }
         }
 
@@ -118,8 +112,7 @@ impl Board {
                 draw([0.2, 0.2, 0.2, 1.0], outer);
                 draw([0.1, 0.1, 0.1, 1.0], inner);
 
-                let color = self.cells[y][x];
-                color.map(|color| {
+                self.cells[y][x].map(|color| {
                     let code = match color {
                         Color::Red     => [1.0, 0.0, 0.0, 1.0],
                         Color::Green   => [0.0, 1.0, 0.0, 1.0],
@@ -157,18 +150,6 @@ impl Board {
         }
     }
 
-    fn does_line_satisify<F>(&self, idx: usize, f: F) -> bool
-        where F: Fn(&Cell) -> bool
-    {
-        for x in 0..self.dim_x() {
-            if !f(&self.cells[idx][x]) {
-                return false
-            }
-        }
-
-        true
-    }
-
     fn without_line(&self, idx: usize) -> Self {
         let mut board = self.clone();
 
@@ -201,27 +182,21 @@ impl Board {
     fn with_trimmed_lines(&self) -> Self {
         let mut board = self.clone();
 
-        while board.does_line_satisify(0, Cell::is_none) {
+        while board.cells[0].iter().all(Cell::is_none) {
             board = board.without_line(0);
         }
 
-        while board.does_line_satisify(board.dim_y() - 1, Cell::is_none) {
+        while board.cells[board.dim_y() - 1].iter().all(Cell::is_none) {
             board = board.without_line(board.dim_y() - 1);
         }
 
         board
     }
 
-    fn get_full_lines(&self) -> Vec<usize> {
-        let mut v = vec![];
-
-        for i in (0..self.dim_y()).rev() {
-            if self.does_line_satisify(i, |cell| !cell.is_none()) {
-                v.push(i);
-            }
-        }
-
-        v
+    fn get_full_lines_indicts(&self) -> Vec<usize> {
+        self.cells.iter().enumerate()
+            .rev().filter(|(_, line)| line.iter().all(|cell| !cell.is_none()))
+            .map(|(idx, _)| idx).collect()
     }
 
     fn transposed(&self) -> Self {
@@ -349,34 +324,32 @@ impl Game {
                 };
                 let is_down = change == (0, 1);
 
-                match self.board.as_merged(new_offset, &falling.piece) {
-                    None => { // There were collisions
-                        if is_down {
-                            match self.board.as_merged(falling.offset, &falling.piece) {
-                                None => Some(State::GameOver),
-                                Some(merged_board) => {
-                                    let completed = merged_board.get_full_lines();
+                if self.board.as_merged(new_offset, &falling.piece).is_none() {
+                     // There were collisions
+                    if is_down {
+                        match self.board.as_merged(falling.offset, &falling.piece) {
+                            None => Some(State::GameOver),
+                            Some(merged_board) => {
+                                let completed = merged_board.get_full_lines_indicts();
+                                self.board = merged_board;
 
-                                    self.board = merged_board;
-                                    *falling = Self::new_falling(&self.possible_pieces);
-                                    if completed.len() > 0 {
-                                        Some(State::Flashing(0, Instant::now(), completed))
-                                    } else {
-                                        None
-                                    }
+                                *falling = Self::new_falling(&self.possible_pieces);
+                                if completed.len() > 0 {
+                                    Some(State::Flashing(0, Instant::now(), completed))
+                                } else {
+                                    None
                                 }
                             }
-                        } else {
-                            None
                         }
-                    },
-                    Some(_) => {
-                        falling.offset = new_offset;
-                        if is_down {
-                            falling.time_since_fall = Instant::now();
-                        }
+                    } else {
                         None
                     }
+                } else { // Keep falling
+                    falling.offset = new_offset;
+                    if is_down {
+                        falling.time_since_fall = Instant::now();
+                    }
+                    None
                 }
             }
         };
@@ -432,9 +405,7 @@ impl Game {
         };
 
         match disp {
-            Disposition::ShouldFall => {
-                self.move_piece((0, 1));
-            }
+            Disposition::ShouldFall => self.move_piece((0, 1)),
             Disposition::NewPiece(new_board) => {
                 self.board = new_board;
                 self.state = State::Falling(Self::new_falling(&self.possible_pieces));
@@ -444,7 +415,7 @@ impl Game {
 
     fn render(&self, gl: &mut GlGraphics, args: &RenderArgs) {
         let res = self.metrics.resolution();
-        let ref c = Context::new_abs(res[0] as f64, res[1] as f64);
+        let c = &Context::new_abs(res[0] as f64, res[1] as f64);
 
         gl.draw(args.viewport(), |_, gl| {
             match &self.state {
@@ -459,11 +430,8 @@ impl Game {
                     self.board.draw(c, gl, effect, &self.metrics);
                 }
                 State::Falling(falling) => {
-                    match self.board.as_merged(falling.offset, &falling.piece) {
-                        None => { }
-                        Some(x) => {
-                            x.draw(c, gl, DrawEffect::None, &self.metrics);
-                        }
+                    if let Some(merged) = self.board.as_merged(falling.offset, &falling.piece) {
+                        merged.draw(c, gl, DrawEffect::None, &self.metrics);
                     }
                 }
                 State::GameOver => {
