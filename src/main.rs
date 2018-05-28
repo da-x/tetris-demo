@@ -471,7 +471,7 @@ impl Game {
 
 fn main() {
     let metrics = Metrics {
-        block_pixels: 50,
+        block_pixels: 20,
         board_x: 8,
         board_y: 20,
     };
