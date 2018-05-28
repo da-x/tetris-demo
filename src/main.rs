@@ -104,10 +104,10 @@ impl Board {
         for x in 0..self.dim_x() {
             for y in 0..self.dim_y() {
                 let block_pixels = metrics.block_pixels as f64;
-                let boarder_size = block_pixels / 20.0;
+                let border_size = block_pixels / 20.0;
                 let outer = [block_pixels * (x as f64), block_pixels * (y as f64), block_pixels, block_pixels];
-                let inner = [outer[0] + boarder_size, outer[1] + boarder_size,
-                       outer[2] - boarder_size * 2.0, outer[3] - boarder_size * 2.0];
+                let inner = [outer[0] + border_size, outer[1] + border_size,
+                       outer[2] - border_size * 2.0, outer[3] - border_size * 2.0];
 
                 draw([0.2, 0.2, 0.2, 1.0], outer);
                 draw([0.1, 0.1, 0.1, 1.0], inner);
