@@ -1,3 +1,5 @@
+<img src="doc/tetris.gif" align="right">
+
 # Tetris Example in Rust
 
 A Tetris example written in Rust using Piston.
@@ -9,8 +11,6 @@ A Tetris example written in Rust using Piston.
 * No 'next piece view'
 * No automatic restart after 'game over'
 * No change in falling piece speed
-
-<img src="doc/tetris.gif">
 
 1) Install Rust from [main site](https://www.rust-lang.org).
 2) Perform the following:
