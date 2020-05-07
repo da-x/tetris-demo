@@ -1,7 +1,3 @@
-extern crate piston_window;
-extern crate opengl_graphics;
-extern crate rand;
-
 use piston_window::*;
 use std::time::{Instant, Duration};
 use opengl_graphics::GlGraphics;
