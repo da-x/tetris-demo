@@ -1,6 +1,5 @@
 use piston_window::*;
 use std::time::{Instant, Duration};
-use opengl_graphics::GlGraphics;
 
 #[derive(Copy, Clone)]
 enum Color {
@@ -91,10 +90,12 @@ impl Board {
         Some(copy)
     }
 
-    fn draw<'a>(&self, c: &Context, gl: &mut GlGraphics, effect: DrawEffect<'a>,
-                metrics: &Metrics) {
+    fn draw<'a, G>(&self, c: &Context, g: &mut G, effect: DrawEffect<'a>,
+                metrics: &Metrics)
+        where G: Graphics
+    {
         let mut draw = |color, rect: [f64; 4]| {
-            Rectangle::new(color).draw(rect, &DrawState::default(), c.transform, gl);
+            Rectangle::new(color).draw(rect, &DrawState::default(), c.transform, g);
         };
 
         for x in 0..self.dim_x() {
@@ -409,11 +410,9 @@ impl Game {
         }
     }
 
-    fn render(&self, gl: &mut GlGraphics, args: &RenderArgs) {
-        let res = self.metrics.resolution();
-        let c = &Context::new_abs(res[0] as f64, res[1] as f64);
-
-        gl.draw(args.viewport(), |_, gl| {
+    fn render(&self, window: &mut PistonWindow, event: &Event)
+    {
+        window.draw_2d(event, |c, g, _| {
             match &self.state {
                 State::Flashing(stage, _, lines) => {
                     let effect = {
@@ -423,15 +422,15 @@ impl Game {
                             DrawEffect::Flash(&lines)
                         }
                     };
-                    self.board.draw(c, gl, effect, &self.metrics);
+                    self.board.draw(&c, g, effect, &self.metrics);
                 }
                 State::Falling(falling) => {
                     if let Some(merged) = self.board.as_merged(falling.offset, &falling.piece) {
-                        merged.draw(c, gl, DrawEffect::None, &self.metrics);
+                        merged.draw(&c, g, DrawEffect::None, &self.metrics);
                     }
                 }
                 State::GameOver => {
-                    self.board.draw(c, gl, DrawEffect::Darker, &self.metrics);
+                    self.board.draw(&c, g, DrawEffect::Darker, &self.metrics);
                 }
             }
         });
@@ -472,19 +471,18 @@ fn main() {
         board_y: 20,
     };
 
-    let mut window: PistonWindow
-        = WindowSettings::new("Tetris", metrics.resolution()).exit_on_esc(true).build().unwrap_or_else(
-            |e| { panic!("Failed: {}", e) }
-        );
+    let mut window: PistonWindow = WindowSettings::new("Tetris",
+            metrics.resolution()).exit_on_esc(true).build().unwrap_or_else(
+                |e| { panic!("Failed: {}", e) }
+            );
 
-    let mut gl = GlGraphics::new(OpenGL::V3_2);
     let mut game = Game::new(metrics);
 
     while let Some(e) = window.next() {
         game.progress();
 
-        if let Some(args) = e.render_args() {
-            game.render(&mut gl, &args);
+        if let Some(_) = e.render_args() {
+            game.render(&mut window, &e);
         }
 
         if let Some(args) = e.press_args() {
