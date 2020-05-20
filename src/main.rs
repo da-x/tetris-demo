@@ -1,6 +1,9 @@
 use piston_window::{WindowSettings, PistonWindow, Event, RenderEvent};
 use piston_window::{Rectangle, DrawState, Context, Graphics};
 
+use rand::Rng;
+
+use std::time::{Duration, Instant};
 use std::collections::HashMap;
 
 #[derive(Copy, Clone)]
@@ -8,7 +11,7 @@ enum Color {
     Red, Green,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Board(HashMap<(i8, i8), Color>);
 
 impl Board {
@@ -22,7 +25,7 @@ impl Board {
         Board(self.0.iter().map(|((x, y), color)| (f((*x, *y)), *color)).collect())
     }
 
-    fn shifted(&self, x: i8, y: i8) -> Self {
+    fn shifted(&self, (x, y): (i8, i8)) -> Self {
         self.modified(|(ox, oy)| (ox + x, oy + y))
     }
 
@@ -84,11 +87,13 @@ impl Metrics {
     }
 }
 
-#[derive(Default)]
 struct Game {
     board: Board,
     metrics: Metrics,
+    falling: Board,
+    shift: (i8, i8),
     possible_pieces: Vec<Board>,
+    time_since_fall: Instant,
 }
 
 impl Game {
@@ -96,6 +101,9 @@ impl Game {
         Self {
             metrics,
             board: Default::default(),
+            falling: Default::default(),
+            time_since_fall: Instant::now(),
+            shift: (0, 0),
             possible_pieces: vec![
                 Board::new(&[
                     (0, 0),
@@ -113,10 +121,33 @@ impl Game {
         }
     }
 
+    fn new_falling(&mut self) {
+        let mut rng = rand::thread_rng();
+        let idx = rng.gen_range(0, self.possible_pieces.len());
+
+        self.falling = self.possible_pieces[idx].clone();
+    }
+
     fn render(&self, window: &mut PistonWindow, event: &Event) {
+        let merged = self.board.merged(&self.falling.shifted(self.shift));
+
         window.draw_2d(event, |c, g, _| {
-            self.board.render(&self.metrics, &c, g);
+            merged.render(&self.metrics, &c, g);
         });
+    }
+
+    fn progress(&mut self) {
+        if self.time_since_fall.elapsed() <= Duration::from_millis(70) {
+            return;
+        }
+
+        self.move_falling(0, 1);
+        self.time_since_fall = Instant::now();
+    }
+
+    fn move_falling(&mut self, x: i8, y: i8) {
+        self.shift.0 += x;
+        self.shift.1 += y;
     }
 }
 
@@ -131,10 +162,11 @@ fn main() {
         "Tetris", metrics.resolution()).exit_on_esc(true).build().unwrap();
     let mut game = Game::new(metrics);
 
-    game.board = game.board.merged(&game.possible_pieces[0]);
-    game.board = game.board.merged(&game.possible_pieces[1].shifted(3, 3));
+    game.new_falling();
 
     while let Some(e) = window.next() {
+        game.progress();
+
         if let Some(_) = e.render_args() {
             game.render(&mut window, &e);
         }
