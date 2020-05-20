@@ -29,16 +29,21 @@ impl Board {
         self.modified(|(ox, oy)| (ox + x, oy + y))
     }
 
-    fn merged(&self, other: &Board) -> Self {
+    fn merged(&self, other: &Board) -> Option<Self> {
         let mut hashmap = HashMap::new();
         hashmap.extend(other.0.iter());
         hashmap.extend(self.0.iter());
-        Self(hashmap)
+
+        if hashmap.len() != self.0.len() + other.0.len() {
+            return None;
+        }
+
+        Some(Self(hashmap))
     }
 
     fn contained(&self, x: i8, y: i8) -> bool {
         self.0.keys().into_iter().cloned()
-            .fold(true, |b, (ox, oy)| b && ox < x && oy < y && x >= 0 && y >= 0)
+            .fold(true, |b, (ox, oy)| b && ox < x && oy < y && ox >= 0 && oy >= 0)
     }
 
     fn render<G>(
@@ -135,7 +140,7 @@ impl Game {
     }
 
     fn render(&self, window: &mut PistonWindow, event: &Event) {
-        let merged = self.board.merged(&self.falling_shifted());
+        let merged = self.board.merged(&self.falling_shifted()).unwrap();
 
         window.draw_2d(event, |c, g, _| {
             merged.render(&self.metrics, &c, g);
@@ -157,14 +162,19 @@ impl Game {
 
     fn move_falling(&mut self, x: i8, y: i8) {
         let falling = self.falling_shifted().shifted((x, y));
+        let merged = self.board.merged(&falling);
+        let contained = falling.contained(self.metrics.board_x as i8,
+                                          self.metrics.board_y as i8);
 
-        if falling.contained(self.metrics.board_x as i8,
-                             self.metrics.board_y as i8)
-        {
+        if merged.is_some() && contained {
+            // Allow the movement
             self.shift.0 += x;
             self.shift.1 += y;
-        } else {
-            self.board = self.board.merged(&self.falling_shifted());
+            return
+        }
+
+        if let (0, 1) = (x, y) {
+            self.board = self.board.merged(&self.falling_shifted()).unwrap();
             self.new_falling();
         }
     }
