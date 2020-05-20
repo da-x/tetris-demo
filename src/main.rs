@@ -11,6 +11,16 @@ impl Board {
         Board(v.iter().cloned().collect())
     }
 
+    fn modified<F>(&self, f: F) -> Self
+        where F: Fn((i8, i8)) -> (i8, i8)
+    {
+        Board(self.0.iter().cloned().map(f).collect())
+    }
+
+    fn shifted(&self, x: i8, y: i8) -> Self {
+        self.modified(|(ox, oy)| (ox + x, oy + y))
+    }
+
     fn merged(&self, other: &Board) -> Self {
         Self(self.0.union(&other.0).cloned().collect())
     }
@@ -111,6 +121,7 @@ fn main() {
     let mut game = Game::new(metrics);
 
     game.board = game.board.merged(&game.possible_pieces[0]);
+    game.board = game.board.merged(&game.possible_pieces[1].shifted(3, 3));
 
     while let Some(e) = window.next() {
         if let Some(_) = e.render_args() {
