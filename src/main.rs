@@ -7,6 +7,14 @@ use std::collections::HashSet;
 struct Board(HashSet<(i8, i8)>);
 
 impl Board {
+    fn new(v: &[(i8, i8)]) -> Self {
+        Board(v.iter().cloned().collect())
+    }
+
+    fn merged(&self, other: &Board) -> Self {
+        Self(self.0.union(&other.0).cloned().collect())
+    }
+
     fn render<G>(
         &self,
         metrics: &Metrics,
@@ -29,6 +37,13 @@ impl Board {
 
                 draw([0.2, 0.2, 0.2, 1.0], outer);
                 draw([0.1, 0.1, 0.1, 1.0], inner);
+
+                if let Some(_) = self.0.get(&(x as i8, y as i8)) {
+                    let code = [1.0, 0.0, 0.0, 1.0];
+                    draw(code, outer);
+                    let code = [code[0]*0.8, code[1]*0.8, code[2]*0.8, code[3]];
+                    draw(code, inner);
+                }
             }
         }
     }
@@ -52,6 +67,7 @@ impl Metrics {
 struct Game {
     board: Board,
     metrics: Metrics,
+    possible_pieces: Vec<Board>,
 }
 
 impl Game {
@@ -59,6 +75,20 @@ impl Game {
         Self {
             metrics,
             board: Default::default(),
+            possible_pieces: vec![
+                Board::new(&[
+                    (0, 0),
+                    (0, 1),
+                    (1, 0),
+                    (1, 1),
+                ][..]),
+                Board::new(&[
+                    (0, 0),
+                    (1, 0),
+                    (1, 1),
+                    (2, 0),
+                ][..]),
+            ]
         }
     }
 
@@ -78,7 +108,9 @@ fn main() {
 
     let mut window: PistonWindow = WindowSettings::new(
         "Tetris", metrics.resolution()).exit_on_esc(true).build().unwrap();
-    let game = Game::new(metrics);
+    let mut game = Game::new(metrics);
+
+    game.board = game.board.merged(&game.possible_pieces[0]);
 
     while let Some(e) = window.next() {
         if let Some(_) = e.render_args() {
