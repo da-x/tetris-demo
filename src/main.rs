@@ -36,6 +36,11 @@ impl Board {
         Self(hashmap)
     }
 
+    fn contained(&self, x: i8, y: i8) -> bool {
+        self.0.keys().into_iter().cloned()
+            .fold(true, |b, (ox, oy)| b && ox < x && oy < y && x >= 0 && y >= 0)
+    }
+
     fn render<G>(
         &self,
         metrics: &Metrics,
@@ -126,14 +131,19 @@ impl Game {
         let idx = rng.gen_range(0, self.possible_pieces.len());
 
         self.falling = self.possible_pieces[idx].clone();
+        self.shift = (0, 0);
     }
 
     fn render(&self, window: &mut PistonWindow, event: &Event) {
-        let merged = self.board.merged(&self.falling.shifted(self.shift));
+        let merged = self.board.merged(&self.falling_shifted());
 
         window.draw_2d(event, |c, g, _| {
             merged.render(&self.metrics, &c, g);
         });
+    }
+
+    fn falling_shifted(&self) -> Board {
+        self.falling.shifted(self.shift)
     }
 
     fn progress(&mut self) {
@@ -146,8 +156,17 @@ impl Game {
     }
 
     fn move_falling(&mut self, x: i8, y: i8) {
-        self.shift.0 += x;
-        self.shift.1 += y;
+        let falling = self.falling_shifted().shifted((x, y));
+
+        if falling.contained(self.metrics.board_x as i8,
+                             self.metrics.board_y as i8)
+        {
+            self.shift.0 += x;
+            self.shift.1 += y;
+        } else {
+            self.board = self.board.merged(&self.falling_shifted());
+            self.new_falling();
+        }
     }
 }
 
