@@ -1,20 +1,25 @@
 use piston_window::{WindowSettings, PistonWindow, Event, RenderEvent};
 use piston_window::{Rectangle, DrawState, Context, Graphics};
 
-use std::collections::HashSet;
+use std::collections::HashMap;
+
+#[derive(Copy, Clone)]
+enum Color {
+    Red, Green,
+}
 
 #[derive(Default)]
-struct Board(HashSet<(i8, i8)>);
+struct Board(HashMap<(i8, i8), Color>);
 
 impl Board {
-    fn new(v: &[(i8, i8)]) -> Self {
-        Board(v.iter().cloned().collect())
+    fn new(v: &[(i8, i8)], color: Color) -> Self {
+        Board(v.iter().cloned().map(|(x, y)| ((x, y), color)).collect())
     }
 
     fn modified<F>(&self, f: F) -> Self
         where F: Fn((i8, i8)) -> (i8, i8)
     {
-        Board(self.0.iter().cloned().map(f).collect())
+        Board(self.0.iter().map(|((x, y), color)| (f((*x, *y)), *color)).collect())
     }
 
     fn shifted(&self, x: i8, y: i8) -> Self {
@@ -22,7 +27,10 @@ impl Board {
     }
 
     fn merged(&self, other: &Board) -> Self {
-        Self(self.0.union(&other.0).cloned().collect())
+        let mut hashmap = HashMap::new();
+        hashmap.extend(other.0.iter());
+        hashmap.extend(self.0.iter());
+        Self(hashmap)
     }
 
     fn render<G>(
@@ -48,8 +56,11 @@ impl Board {
                 draw([0.2, 0.2, 0.2, 1.0], outer);
                 draw([0.1, 0.1, 0.1, 1.0], inner);
 
-                if let Some(_) = self.0.get(&(x as i8, y as i8)) {
-                    let code = [1.0, 0.0, 0.0, 1.0];
+                if let Some(color) = self.0.get(&(x as i8, y as i8)) {
+                    let code = match color {
+                        Color::Red     => [1.0, 0.0, 0.0, 1.0],
+                        Color::Green   => [0.0, 1.0, 0.0, 1.0],
+                    };
                     draw(code, outer);
                     let code = [code[0]*0.8, code[1]*0.8, code[2]*0.8, code[3]];
                     draw(code, inner);
@@ -91,13 +102,13 @@ impl Game {
                     (0, 1),
                     (1, 0),
                     (1, 1),
-                ][..]),
+                ][..], Color::Red),
                 Board::new(&[
                     (0, 0),
                     (1, 0),
                     (1, 1),
                     (2, 0),
-                ][..]),
+                ][..], Color::Green),
             ]
         }
     }
