@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 #[derive(Copy, Clone)]
 enum Color {
-    Red, Green,
+    Red, Green, Blue, Magenta, Cyan, Yellow, Orange,
 }
 
 #[derive(Default, Clone)]
@@ -97,6 +97,11 @@ impl Board {
                     let code = match color {
                         Color::Red     => [1.0, 0.0, 0.0, 1.0],
                         Color::Green   => [0.0, 1.0, 0.0, 1.0],
+                        Color::Blue    => [0.5, 0.5, 1.0, 1.0],
+                        Color::Magenta => [1.0, 0.0, 1.0, 1.0],
+                        Color::Cyan    => [0.0, 1.0, 1.0, 1.0],
+                        Color::Yellow  => [1.0, 1.0, 0.0, 1.0],
+                        Color::Orange  => [1.0, 0.5, 0.0, 1.0],
                     };
                     draw(code, outer);
                     let code = [code[0]*0.8, code[1]*0.8, code[2]*0.8, code[3]];
@@ -139,18 +144,13 @@ impl Game {
             time_since_fall: Instant::now(),
             shift: (0, 0),
             possible_pieces: vec![
-                Board::new(&[
-                    (0, 0),
-                    (0, 1),
-                    (1, 0),
-                    (1, 1),
-                ][..], Color::Red),
-                Board::new(&[
-                    (0, 0),
-                    (1, 0),
-                    (1, 1),
-                    (2, 0),
-                ][..], Color::Green),
+                Board::new(&[(0, 0), (0, 1), (1, 0), (1, 1), ][..], Color::Red),
+                Board::new(&[(0, 0), (1, 0), (1, 1), (2, 0), ][..], Color::Green),
+                Board::new(&[(0, 0), (1, 0), (2, 0), (3, 0), ][..], Color::Blue),
+                Board::new(&[(0, 0), (1, 0), (2, 0), (0, 1), ][..], Color::Orange),
+                Board::new(&[(0, 0), (1, 0), (2, 0), (2, 1), ][..], Color::Yellow),
+                Board::new(&[(0, 0), (1, 0), (1, 1), (2, 1), ][..], Color::Cyan),
+                Board::new(&[(1, 0), (2, 0), (0, 1), (1, 1), ][..], Color::Magenta),
             ]
         }
     }
