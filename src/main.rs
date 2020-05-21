@@ -26,6 +26,14 @@ impl Board {
         Board(self.0.iter().map(|((x, y), color)| (f((*x, *y)), *color)).collect())
     }
 
+    fn modified_filter<F>(&self, f: F) -> Self
+        where F: Fn((i8, i8)) -> Option<(i8, i8)>
+    {
+        Board(self.0.iter()
+            .filter_map(|((x, y), color)| f((*x, *y)).map(|p| (p, *color)))
+            .collect())
+    }
+
     fn transposed(&self) -> Self {
         self.modified(|(ox, oy)| (oy, ox))
     }
@@ -68,6 +76,29 @@ impl Board {
     fn contained(&self, x: i8, y: i8) -> bool {
         self.0.keys().into_iter().cloned()
             .fold(true, |b, (ox, oy)| b && ox < x && oy < y && ox >= 0 && oy >= 0)
+    }
+
+    fn whole_lines(&self, x: i8, y: i8) -> Vec<i8> {
+        let mut idxs = vec![];
+        for oy in 0 .. y {
+            if (0 .. x).filter_map(|ox| self.0.get(&(ox, oy))).count() == x as usize {
+                idxs.push(oy)
+            }
+        }
+
+        idxs
+    }
+
+    fn kill_line(&self, y: i8) -> Self {
+        self.modified_filter(|(ox, oy)|
+            if oy > y {
+                Some((ox, oy))
+            } else if oy == y {
+                None
+            } else {
+                Some((ox, oy + 1))
+            }
+        )
     }
 
     fn render<G>(
@@ -202,6 +233,10 @@ impl Game {
 
         if let (0, 1) = (x, y) {
             self.board = self.board.merged(&self.falling_shifted()).unwrap();
+            for idx in self.board.whole_lines(self.metrics.board_x as i8,
+                                              self.metrics.board_y as i8) {
+                self.board = self.board.kill_line(idx);
+            }
             self.new_falling();
         }
     }
