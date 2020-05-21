@@ -9,6 +9,7 @@ use std::collections::HashMap;
 
 enum DrawEffect<'a> {
     None,
+    Darker,
     Flash(&'a Vec<i8>),
 }
 
@@ -152,6 +153,9 @@ impl Board {
                             draw([1.0, 1.0, 1.0, 0.5], outer);
                         }
                     }
+                    DrawEffect::Darker => {
+                        draw([0.0, 0.0, 0.0, 0.9], outer);
+                    }
                 }
             }
         }
@@ -175,6 +179,7 @@ impl Metrics {
 enum State {
     Flashing(isize, Instant, Vec<i8>),
     Falling(Board),
+    GameOver,
 }
 
 struct Game {
@@ -213,8 +218,12 @@ impl Game {
         self.state = State::Falling(self.possible_pieces[idx].clone());
         self.shift = (0, 0);
 
-        for _ in 0 .. rng.gen_range(0, 4usize) {
-            self.rotate(false)
+        if self.board.merged(&self.falling_shifted()).is_none() {
+            self.state = State::GameOver;
+        } else {
+            for _ in 0 .. rng.gen_range(0, 4usize) {
+                self.rotate(false)
+            }
         }
     }
 
@@ -229,6 +238,7 @@ impl Game {
                     };
                     (self.board.clone(), draw_effect)
                 }
+                State::GameOver => (self.board.clone(), DrawEffect::Darker),
                 State::Falling(_) => (
                     self.board.merged(&self.falling_shifted()).unwrap(), DrawEffect::None),
             };
@@ -242,6 +252,7 @@ impl Game {
             State::Falling(state_falling) => {
                 state_falling.shifted(self.shift)
             }
+            State::GameOver { ..  } => panic!(),
             State::Flashing { ..  } => panic!(),
         }
     }
@@ -272,6 +283,7 @@ impl Game {
                     self.new_falling()
                 }
             }
+            State::GameOver { } => {},
         }
     }
 
@@ -329,12 +341,20 @@ impl Game {
                     _ => return,
                 }
             }
+            State::GameOver { } => {
+                match key {
+                    Key::Return => {
+                        self.board.0.clear();
+                        self.new_falling();
+                    },
+                    _ => return,
+                }
+            },
         }
     }
 
     fn rotate(&mut self, counter: bool) {
         match &mut self.state {
-            State::Flashing {..} => panic!(),
             State::Falling(state_falling) => {
                 let rotated = if counter {
                     state_falling.rotated()
@@ -361,6 +381,8 @@ impl Game {
                     }
                 }
             }
+            State::GameOver {..} => panic!(),
+            State::Flashing {..} => panic!(),
         }
     }
 }
