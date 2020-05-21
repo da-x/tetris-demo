@@ -239,13 +239,20 @@ impl Game {
         let (x, y) = rotated.negative_shift();
         let falling = rotated.shifted((-x, -y));
 
-        if let Some(merged) = self.board.merged(&falling.shifted(self.shift)) {
-            if merged.contained(self.metrics.board_x as i8,
-                                self.metrics.board_y as i8)
-            {
-                // Allow the rotation
-                self.falling = falling;
-                return
+        for d in &[(0, 0), (-1, 0)] {
+            let mut shift = self.shift;
+            shift.0 += d.0;
+            shift.1 += d.1;
+
+            if let Some(merged) = self.board.merged(&falling.shifted(shift)) {
+                if merged.contained(self.metrics.board_x as i8,
+                    self.metrics.board_y as i8)
+                {
+                    // Allow the rotation
+                    self.falling = falling;
+                    self.shift = shift;
+                    return
+                }
             }
         }
     }
