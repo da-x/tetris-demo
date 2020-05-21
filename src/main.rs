@@ -26,6 +26,29 @@ impl Board {
         Board(self.0.iter().map(|((x, y), color)| (f((*x, *y)), *color)).collect())
     }
 
+    fn transposed(&self) -> Self {
+        self.modified(|(ox, oy)| (oy, ox))
+    }
+
+    fn mirrored_y(&self) -> Self {
+        self.modified(|(ox, oy)| (ox, -oy))
+    }
+
+    fn rotated(&self) -> Self {
+        self.mirrored_y().transposed()
+    }
+
+    fn rotated_counter(&self) -> Self {
+        self.rotated().rotated().rotated()
+    }
+
+    fn negative_shift(&self) -> (i8, i8) {
+        use std::cmp::min;
+
+        self.0.keys().into_iter().cloned()
+            .fold((0, 0), |(mx, my), (ox, oy)| (min(mx, ox), min(my, oy)))
+    }
+
     fn shifted(&self, (x, y): (i8, i8)) -> Self {
         self.modified(|(ox, oy)| (ox + x, oy + y))
     }
@@ -198,6 +221,32 @@ impl Game {
         if let Some(movement) = movement {
             self.move_falling(movement.0, movement.1);
             return;
+        }
+
+        match key {
+            Key::Up => self.rotate(false),
+            Key::NumPad5 => self.rotate(true),
+            _ => return,
+        }
+    }
+
+    fn rotate(&mut self, counter: bool) {
+        let rotated = if counter {
+            self.falling.rotated()
+        } else {
+            self.falling.rotated_counter()
+        };
+        let (x, y) = rotated.negative_shift();
+        let falling = rotated.shifted((-x, -y));
+
+        if let Some(merged) = self.board.merged(&falling.shifted(self.shift)) {
+            if merged.contained(self.metrics.board_x as i8,
+                                self.metrics.board_y as i8)
+            {
+                // Allow the rotation
+                self.falling = falling;
+                return
+            }
         }
     }
 }
