@@ -161,6 +161,9 @@ impl Game {
 
         self.falling = self.possible_pieces[idx].clone();
         self.shift = (0, 0);
+        for _ in 0 .. rng.gen_range(0, 4usize) {
+            self.rotate(false)
+        }
     }
 
     fn render(&self, window: &mut PistonWindow, event: &Event) {
