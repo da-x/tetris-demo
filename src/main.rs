@@ -7,6 +7,11 @@ use rand::Rng;
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 
+enum DrawEffect<'a> {
+    None,
+    Flash(&'a Vec<i8>),
+}
+
 #[derive(Copy, Clone)]
 enum Color {
     Red, Green, Blue, Magenta, Cyan, Yellow, Orange,
@@ -101,11 +106,12 @@ impl Board {
         )
     }
 
-    fn render<G>(
+    fn render<'a, G>(
         &self,
         metrics: &Metrics,
         c: &Context,
         g: &mut G,
+        draw_effect: DrawEffect<'a>,
     )
         where G: Graphics
     {
@@ -138,6 +144,15 @@ impl Board {
                     let code = [code[0]*0.8, code[1]*0.8, code[2]*0.8, code[3]];
                     draw(code, inner);
                 }
+
+                match draw_effect {
+                    DrawEffect::None => {},
+                    DrawEffect::Flash(lines) => {
+                        if lines.contains(&(y as i8)) {
+                            draw([1.0, 1.0, 1.0, 0.5], outer);
+                        }
+                    }
+                }
             }
         }
     }
@@ -157,10 +172,15 @@ impl Metrics {
     }
 }
 
+enum State {
+    Flashing(isize, Instant, Vec<i8>),
+    Falling(Board),
+}
+
 struct Game {
     board: Board,
     metrics: Metrics,
-    falling: Board,
+    state: State,
     shift: (i8, i8),
     possible_pieces: Vec<Board>,
     time_since_fall: Instant,
@@ -171,7 +191,7 @@ impl Game {
         Self {
             metrics,
             board: Default::default(),
-            falling: Default::default(),
+            state: State::Falling(Default::default()),
             time_since_fall: Instant::now(),
             shift: (0, 0),
             possible_pieces: vec![
@@ -190,32 +210,69 @@ impl Game {
         let mut rng = rand::thread_rng();
         let idx = rng.gen_range(0, self.possible_pieces.len());
 
-        self.falling = self.possible_pieces[idx].clone();
+        self.state = State::Falling(self.possible_pieces[idx].clone());
         self.shift = (0, 0);
+
         for _ in 0 .. rng.gen_range(0, 4usize) {
             self.rotate(false)
         }
     }
 
     fn render(&self, window: &mut PistonWindow, event: &Event) {
-        let merged = self.board.merged(&self.falling_shifted()).unwrap();
-
         window.draw_2d(event, |c, g, _| {
-            merged.render(&self.metrics, &c, g);
+           let (board, draw_effect) = match &self.state {
+                State::Flashing(stage, _, lines) => {
+                    let draw_effect = if *stage % 2 == 0 {
+                        DrawEffect::None
+                    } else {
+                        DrawEffect::Flash(lines)
+                    };
+                    (self.board.clone(), draw_effect)
+                }
+                State::Falling(_) => (
+                    self.board.merged(&self.falling_shifted()).unwrap(), DrawEffect::None),
+            };
+
+            board.render(&self.metrics, &c, g, draw_effect);
         });
     }
 
     fn falling_shifted(&self) -> Board {
-        self.falling.shifted(self.shift)
+        match &self.state {
+            State::Falling(state_falling) => {
+                state_falling.shifted(self.shift)
+            }
+            State::Flashing { ..  } => panic!(),
+        }
     }
 
     fn progress(&mut self) {
-        if self.time_since_fall.elapsed() <= Duration::from_millis(700) {
-            return;
-        }
+        match &mut self.state {
+            State::Falling(_) => {
+                if self.time_since_fall.elapsed() <= Duration::from_millis(700) {
+                    return;
+                }
 
-        self.move_falling(0, 1);
-        self.time_since_fall = Instant::now();
+                self.move_falling(0, 1);
+                self.time_since_fall = Instant::now();
+            }
+            State::Flashing(stage, last_stage_switch, lines) => {
+                if last_stage_switch.elapsed() <= Duration::from_millis(50) {
+                    return;
+                }
+
+                if *stage < 18 {
+                    *stage += 1;
+                    *last_stage_switch = Instant::now();
+                    return;
+                } else {
+                    for idx in lines {
+                        self.board = self.board.kill_line(*idx);
+                    }
+                    self.new_falling()
+                }
+            }
+        }
     }
 
     fn move_falling(&mut self, x: i8, y: i8) {
@@ -233,11 +290,13 @@ impl Game {
 
         if let (0, 1) = (x, y) {
             self.board = self.board.merged(&self.falling_shifted()).unwrap();
-            for idx in self.board.whole_lines(self.metrics.board_x as i8,
-                                              self.metrics.board_y as i8) {
-                self.board = self.board.kill_line(idx);
+            let completed = self.board.whole_lines(self.metrics.board_x as i8,
+                self.metrics.board_y as i8);
+            if completed.is_empty() {
+                self.new_falling();
+            } else {
+                self.state = State::Flashing(0, Instant::now(), completed);
             }
-            self.new_falling();
         }
     }
 
@@ -249,47 +308,57 @@ impl Game {
     }
 
     fn on_key(&mut self, key: &Key) {
-        let movement = match key {
-            Key::Right => Some((1, 0)),
-            Key::Left => Some((-1, 0)),
-            Key::Down => Some((0, 1)),
-            _ => None,
-        };
+        match &mut self.state {
+            State::Flashing {..} => {},
+            State::Falling {..} => {
+                let movement = match key {
+                    Key::Right => Some((1, 0)),
+                    Key::Left => Some((-1, 0)),
+                    Key::Down => Some((0, 1)),
+                    _ => None,
+                };
 
-        if let Some(movement) = movement {
-            self.move_falling(movement.0, movement.1);
-            return;
-        }
+                if let Some(movement) = movement {
+                    self.move_falling(movement.0, movement.1);
+                    return;
+                }
 
-        match key {
-            Key::Up => self.rotate(false),
-            Key::NumPad5 => self.rotate(true),
-            _ => return,
+                match key {
+                    Key::Up => self.rotate(false),
+                    Key::NumPad5 => self.rotate(true),
+                    _ => return,
+                }
+            }
         }
     }
 
     fn rotate(&mut self, counter: bool) {
-        let rotated = if counter {
-            self.falling.rotated()
-        } else {
-            self.falling.rotated_counter()
-        };
-        let (x, y) = rotated.negative_shift();
-        let falling = rotated.shifted((-x, -y));
+        match &mut self.state {
+            State::Flashing {..} => panic!(),
+            State::Falling(state_falling) => {
+                let rotated = if counter {
+                    state_falling.rotated()
+                } else {
+                    state_falling.rotated_counter()
+                };
+                let (x, y) = rotated.negative_shift();
+                let falling = rotated.shifted((-x, -y));
 
-        for d in &[(0, 0), (-1, 0)] {
-            let mut shift = self.shift;
-            shift.0 += d.0;
-            shift.1 += d.1;
+                for d in &[(0, 0), (-1, 0)] {
+                    let mut shift = self.shift;
+                    shift.0 += d.0;
+                    shift.1 += d.1;
 
-            if let Some(merged) = self.board.merged(&falling.shifted(shift)) {
-                if merged.contained(self.metrics.board_x as i8,
-                    self.metrics.board_y as i8)
-                {
-                    // Allow the rotation
-                    self.falling = falling;
-                    self.shift = shift;
-                    return
+                    if let Some(merged) = self.board.merged(&falling.shifted(shift)) {
+                        if merged.contained(self.metrics.board_x as i8,
+                            self.metrics.board_y as i8)
+                        {
+                            // Allow the rotation
+                            *state_falling = falling;
+                            self.shift = shift;
+                            return
+                        }
+                    }
                 }
             }
         }
