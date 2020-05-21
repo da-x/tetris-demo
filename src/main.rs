@@ -1,5 +1,6 @@
-use piston_window::{WindowSettings, PistonWindow, Event, RenderEvent};
+use piston_window::{WindowSettings, PistonWindow, Event, RenderEvent, PressEvent};
 use piston_window::{Rectangle, DrawState, Context, Graphics};
+use piston_window::{Button, Key};
 
 use rand::Rng;
 
@@ -152,7 +153,7 @@ impl Game {
     }
 
     fn progress(&mut self) {
-        if self.time_since_fall.elapsed() <= Duration::from_millis(70) {
+        if self.time_since_fall.elapsed() <= Duration::from_millis(700) {
             return;
         }
 
@@ -178,6 +179,27 @@ impl Game {
             self.new_falling();
         }
     }
+
+    fn on_press(&mut self, args: &Button) {
+        match args {
+            Button::Keyboard(key) => { self.on_key(key); }
+            _ => {},
+        }
+    }
+
+    fn on_key(&mut self, key: &Key) {
+        let movement = match key {
+            Key::Right => Some((1, 0)),
+            Key::Left => Some((-1, 0)),
+            Key::Down => Some((0, 1)),
+            _ => None,
+        };
+
+        if let Some(movement) = movement {
+            self.move_falling(movement.0, movement.1);
+            return;
+        }
+    }
 }
 
 fn main() {
@@ -198,6 +220,10 @@ fn main() {
 
         if let Some(_) = e.render_args() {
             game.render(&mut window, &e);
+        }
+
+        if let Some(args) = e.press_args() {
+            game.on_press(&args);
         }
     }
 }
